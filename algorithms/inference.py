@@ -23,7 +23,44 @@ def enumeration_ask(network, query: str, evidence: dict) -> dict:
     """
     # Valida nombres de variables y dominio de la evidencia.
     network.validate_query(query, evidence)
-
-    # TODO: Add your code here
-    raise NotImplementedError("Complete este bloque TODO")
-    # FIN DEL BLOQUE DEL ESTUDIANTE
+ 
+    variables = network.variables  # orden topológico
+ 
+    def enumerate_all(index, event):
+        # Validacion de la condicion de parada, si se han recorrido todas las variables, el producto sin factores restantes vale 1.
+        if index == len(variables):
+            return 1.0  # producto sin factores restantes
+            
+        variable = variables[index]
+        
+        # Validacion de la variable actual, si ya está fijada en la evidencia se multiplica su probabilidad.
+        if variable in event:  # variable fijada: multiplicar
+            return (network.probability(variable, event[variable], event)
+                    * enumerate_all(index + 1, event))
+                    
+        total = 0.0  # variable oculta: sumar sobre 0 y 1
+        for value in (0, 1):
+            extended = {**event, variable: value}  # copia del evento
+            total += (network.probability(variable, value, extended)
+                      * enumerate_all(index + 1, extended))
+                      
+        # Retorno de la suma total calculada para la variable oculta sobre sus alternativas 0 y 1.
+        return total
+ 
+    # Validacion de la consulta, si la variable consultada ya fue observada en la evidencia.
+    if query in evidence:  # consulta observada
+        # Validacion de la evidencia, se comprueba si la probabilidad conjunta evaluada es cero para determinar si la evidencia es imposible.
+        if enumerate_all(0, dict(evidence)) == 0:
+            raise ValueError("La evidencia es imposible")
+            
+        # Retorno de la distribución puntual basada en el valor observado en la evidencia.
+        return {0: float(evidence[query] == 0), 1: float(evidence[query] == 1)}
+ 
+    weights = {value: enumerate_all(0, {**evidence, query: value}) for value in (0, 1)}
+    
+    # Validacion de los pesos resultantes, si la suma de los pesos es cero la evidencia es imposible.
+    if weights[0] + weights[1] == 0:
+        raise ValueError("La evidencia es imposible")
+        
+    # Retorno del diccionario normalizado con las probabilidades finales de la consulta.
+    return normalize(weights)
